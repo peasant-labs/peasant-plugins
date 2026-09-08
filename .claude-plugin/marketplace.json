@@ -1,0 +1,14 @@
+{
+  "name": "peasant-plugins",
+  "owner": { "name": "peasant-labs" },
+  "metadata": {
+    "description": "Claude Code plugins for peasant — record and browse your AI coding sessions locally."
+  },
+  "plugins": [
+    {
+      "name": "peasant",
+      "source": "./plugins/peasant",
+      "description": "Harvest the current Claude Code session into peasant and open its transcript in the local web dashboard."
+    }
+  ]
+}

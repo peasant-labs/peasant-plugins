@@ -1,0 +1,6 @@
+{
+  "name": "peasant",
+  "description": "Harvest the current Claude Code session into peasant and open its transcript in the local web dashboard.",
+  "version": "0.1.0",
+  "author": { "name": "peasant-labs" }
+}
