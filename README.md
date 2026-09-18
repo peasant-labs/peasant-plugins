@@ -20,9 +20,10 @@ What it does when you type `/peasant`:
 
 The whole flow is one bundled script
 (`plugins/peasant/scripts/open-session.sh`), and a `UserPromptExpansion` hook
-(`plugins/peasant/hooks/hooks.json`) runs it and blocks the command expansion.
-Claude is never invoked, so `/peasant` costs no tokens and takes a couple of
-seconds. The hook reports progress and the URL to you directly.
+(`plugins/peasant/hooks/hooks.json`) runs it and stops the command expansion with
+a `stopReason`. Claude never processes the prompt, so `/peasant` costs no tokens
+and takes a couple of seconds. The hook reports progress and the URL to you as a
+normal user-facing note.
 
 If hooks are disabled by policy, the skill body runs the same script as a
 fallback, and that path does spend a turn.
@@ -49,5 +50,6 @@ Then type `/peasant` in any session.
   `${CLAUDE_SESSION_ID}` on the fallback path; when neither is available it falls
   back to the most recently written transcript for the current directory. It
   targets Claude Code sessions.
-- Because the hook blocks the command, the result renders as a block notice
-  showing the progress line and URL, not as an assistant message.
+- Because the hook stops the command processing, the result renders as a
+  user-facing note carrying the progress line and URL, not as an assistant
+  message.

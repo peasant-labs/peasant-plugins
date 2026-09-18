@@ -4,18 +4,18 @@
 # Two modes:
 #
 #   open-session.sh <session-id>   Plain mode. Used by the skill's fallback
-#                                  block when hooks are disabled. Prints
-#                                  progress + the URL, always exits 0.
+#                                  block when hooks are disabled. Writes
+#                                  progress + the URL to stderr, exits 0.
 #
 #   open-session.sh --hook         Hook mode. Reads the UserPromptExpansion
-#                                  JSON on stdin, takes the session id from it,
-#                                  and exits 2 so the expansion is BLOCKED and
-#                                  Claude is never invoked. Progress + the URL
-#                                  go to stderr, which is shown to the user.
-#                                  This is the zero-token path.
+#                                  JSON on stdin and prints a JSON object with
+#                                  `continue: false` and a `stopReason`, so
+#                                  Claude processes nothing (zero tokens) and
+#                                  the message renders as a normal user-facing
+#                                  note instead of a blocked-hook warning.
 #
 # Either mode: record only this session, ensure the dashboard is up, open the
-# transcript, print the URL.
+# transcript, report the URL.
 set -uo pipefail
 
 PORT=8690
@@ -30,14 +30,25 @@ else
   SID="${1:-}"
 fi
 
-# Progress goes to stderr: plain mode merges it into the skill's injected text,
-# hook mode uses stderr as the blocking message. Keep lines short and human.
-say()  { printf '%s\n' "$*" >&2; }
-fail() {
-  printf 'ERROR: %s\n' "$1" >&2
-  [ "$MODE" = hook ] && exit 2   # still block: never spend a model turn on a failure
+# The message is accumulated with literal \n escapes: they are valid JSON
+# string escapes in hook mode and are expanded for the terminal in plain mode.
+MSG=""
+say() {
+  if [ -n "$MSG" ]; then MSG="$MSG\n$*"; else MSG="$*"; fi
+}
+
+# Print the accumulated message in the shape the current mode needs. Always
+# exits 0 — nothing here is an error, and the browser already opened.
+emit() {
+  if [ "$MODE" = hook ]; then
+    printf '{"continue":false,"stopReason":"%s"}\n' "$MSG"
+  else
+    printf '%b\n' "$MSG" >&2
+  fi
   exit 0
 }
+
+fail() { say "ERROR: $1"; emit; }
 
 command -v peasant >/dev/null 2>&1 || fail "the 'peasant' binary is not on your PATH"
 
@@ -86,5 +97,4 @@ case "$(uname -s)" in
 esac
 
 say "URL: ${url}"
-[ "$MODE" = hook ] && exit 2   # block the expansion: the model never runs
-exit 0
+emit
