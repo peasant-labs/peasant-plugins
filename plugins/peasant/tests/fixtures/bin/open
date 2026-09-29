@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Stub browser opener (`open` on macOS, `xdg-open` on Linux) for
+# tests/smoke.sh. `peasant open` opens the browser itself, so the plugin script
+# must never call this: every call is recorded in the file named by
+# PEASANT_STUB_BROWSER, and the smoke test fails when that file exists.
+printf '%s\n' "$*" >> "$PEASANT_STUB_BROWSER"

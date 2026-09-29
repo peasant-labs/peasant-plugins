@@ -1,0 +1,9 @@
+Error: unknown flag: --hook
+Usage:
+  peasant open [flags]
+
+Flags:
+  -h, --help             help for open
+      --port int         Port of the web dashboard (default 8690)
+      --session string   ID of the session to record and open (required)
+
