@@ -17,15 +17,10 @@ What it does when you type `/peasant`:
    (refreshing it if already stored, with commit detection), starts the
    dashboard if it is not already running, and opens this session's transcript
    in your browser. It records ONLY this session, never the whole project.
-3. Shows at most two lines:
-
-   ```
-   peasant: opened "<title>" · not published
-   http://localhost:8690/projects/<project-hash>/<session-id>
-   ```
-
-   If a step fails, it shows one line instead, which names the step, the
-   reason, and the command that fixes it.
+3. Shows at most two lines: `peasant: opened "<title>" · not published` (or
+   `· published`), then the address of the transcript in the dashboard. If a
+   step fails, it shows one line instead, which names the step, the reason,
+   and the command that fixes it. `peasant open --help` describes the output.
 
 The plugin's bundled script (`plugins/peasant/scripts/open-session.sh`) is a
 thin shim over `peasant open`: it finds the session id and passes the
@@ -43,7 +38,8 @@ fallback, and that path does spend a turn.
 You must have the `peasant` binary installed and on your `PATH`, in a release
 that has the `peasant open` command. This plugin does not install or bundle it.
 See https://github.com/peasant-labs/peasant. With an older peasant, `/peasant`
-prints one line that asks you to update it with `peasant upgrade`.
+prints one line that asks you to run `peasant upgrade`, or
+`peasant upgrade --prerelease` while only a pre-release has `peasant open`.
 
 ## Install
 
@@ -57,7 +53,7 @@ Then type `/peasant` in any session.
 ## Scope and limitations (MVP)
 
 - Records only the session that ran `/peasant`.
-- Assumes the default dashboard port `8690`.
+- Uses peasant's default dashboard port: the plugin passes no `--port`.
 - Takes the session id from the hook input, or from Claude Code's
   `${CLAUDE_SESSION_ID}` on the fallback path; when neither is available it falls
   back to the most recently written transcript for the current directory. It

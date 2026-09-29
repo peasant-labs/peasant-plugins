@@ -19,6 +19,9 @@
 #                                   `peasant open`: two on stdout on success,
 #                                   one on stderr on failure.
 #
+# Anything else peasant writes to stderr, such as a one-time config migration
+# notice, is dropped, so the output stays at most two lines.
+#
 # Both modes exit 0 on every outcome. The output reports a failure, so the
 # hook does not render as an error and the skill fallback can relay it.
 set -uo pipefail
@@ -49,14 +52,16 @@ report() {
 command -v peasant >/dev/null 2>&1 || report "ERROR: the 'peasant' binary is not on your PATH"
 
 # Fall back to the newest transcript for this directory when no session id was
-# supplied (older Claude Code, or a skill synced from claude.ai).
+# supplied (older Claude Code, or a skill synced from claude.ai). Claude Code
+# names the directory after the path with every non-alphanumeric character
+# replaced by '-'.
 if [ -z "$SID" ]; then
-  dir="$HOME/.claude/projects/$(printf '%s' "$PWD" | sed 's#/#-#g')"
+  dir="$HOME/.claude/projects/$(printf '%s' "$PWD" | LC_ALL=C sed 's#[^A-Za-z0-9]#-#g')"
   SID="$(ls -t "$dir"/*.jsonl 2>/dev/null | head -1 | xargs -r -n1 basename 2>/dev/null | sed 's/\.jsonl$//')"
 fi
 [ -n "$SID" ] || report "ERROR: no Claude Code transcript found for this directory"
 
-errors="$(mktemp "${TMPDIR:-/tmp}/peasant-open.XXXXXX")" || report "ERROR: could not create a temporary file for the output of 'peasant open'"
+errors="$(mktemp "${TMPDIR:-/tmp}/peasant-open.XXXXXX" 2>/dev/null)" || report "ERROR: could not create a temporary file for the output of 'peasant open'"
 trap 'rm -f "$errors"' EXIT
 
 # failure_line DEFAULT: the one line to show when `peasant open` did not give
@@ -70,7 +75,7 @@ failure_line() {
   if [ -n "$line" ]; then
     printf '%s' "$line"
   elif grep -q 'unknown command "open"' "$errors"; then
-    printf '%s' 'peasant: open failed: this peasant has no open command; fix: update peasant with `peasant upgrade`'
+    printf '%s' 'peasant: open failed: this peasant has no open command; fix: run `peasant upgrade`, or `peasant upgrade --prerelease` if that finds no newer release'
   else
     line="$(sed -n '/[^[:space:]]/{p;q;}' "$errors")"
     line="${line#Error: }"
@@ -81,22 +86,17 @@ failure_line() {
 if [ "$MODE" = hook ]; then
   out="$(peasant open --session "$SID" --hook </dev/null 2>"$errors")"
   status=$?
-  # `peasant open --hook` owns the hook response: one JSON object on one line,
-  # on every outcome. Pass it through unchanged.
+  # Once its flags parse, `peasant open --hook` prints the hook response and
+  # exits 0 on every outcome. Pass the response through unchanged.
   if [ "$status" -eq 0 ]; then
-    case "$out" in
-      *$'\n'*) ;;
-      '{'*'}') printf '%s\n' "$out"; exit 0 ;;
-    esac
+    printf '%s\n' "$out"
+    exit 0
   fi
-  report "$(failure_line "peasant open printed no hook response (exit status $status)")"
+  report "$(failure_line "peasant exited with status $status and printed no error")"
 fi
 
 # Plain mode: the lines on stdout pass straight through.
 peasant open --session "$SID" </dev/null 2>"$errors"
 status=$?
-if [ "$status" -eq 0 ]; then
-  cat "$errors" >&2
-  exit 0
-fi
-report "$(failure_line "peasant open exited with status $status and printed no error")"
+[ "$status" -ne 0 ] || exit 0
+report "$(failure_line "peasant exited with status $status and printed no error")"

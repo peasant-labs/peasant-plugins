@@ -28,15 +28,16 @@ check "hooks.json is valid JSON" "python3 -c 'import json;json.load(open(\"$plug
 check "hooks.json targets the peasant command" "grep -q 'UserPromptExpansion' \"$plugin/hooks/hooks.json\" && grep -q 'peasant' \"$plugin/hooks/hooks.json\""
 check "hooks.json calls the bundled script in hook mode" "grep -q 'open-session.sh --hook' \"$plugin/hooks/hooks.json\""
 
-# Each directory under tests/fixtures/cases/ is one run of open-session.sh,
-# with tests/fixtures/bin (the stub peasant and a stub browser opener) first
-# on PATH, HOME and the working directory empty, and these files:
+# Each directory under tests/fixtures/cases/ is one run of open-session.sh
+# with an empty HOME and working directory, and a PATH that holds only the
+# tools below, the stub browser openers (tests/fixtures/bin/open, xdg-open)
+# and the stub peasant (tests/fixtures/bin/peasant). A case has these files:
 #
 #   args           the script's arguments on one line (--hook: hook mode)
 #   stdin          the hook input (absent: empty stdin)
 #   no-peasant     run with no peasant on PATH
-#   transcripts/   Claude Code transcripts for the newest-transcript fallback,
-#                  placed in ~/.claude/projects/<cwd>, oldest first by name
+#   transcripts    Claude Code transcript names, oldest first, created in
+#                  ~/.claude/projects/<cwd> for the newest-transcript fallback
 #   stub.stdout, stub.stderr, stub.exit
 #                  what the stub peasant prints, and its exit status
 #   expect.stdout, expect.stderr
@@ -44,31 +45,44 @@ check "hooks.json calls the bundled script in hook mode" "grep -q 'open-session.
 #   expect.argv    the arguments the stub received, one per line (absent: the
 #                  stub must not run)
 #
-# Every run must also exit 0, never call the browser opener (peasant open
-# opens the browser itself), and remove its temporary file. A hook run must
-# print exactly one hook response whose stopReason has at most two lines, and
-# a plain run at most two lines in all.
+# Every run must also exit 0, never call a browser opener (peasant open opens
+# the browser itself), and leave no file of its own behind. A hook run must
+# print one hook response with continue:false and a stopReason of at most two
+# lines, and a plain run at most two lines in all.
 #
-# Every case is named here, so a deleted case directory fails the smoke.
+# The tools the script may run. A tool it starts using must be added here.
+script_tools="bash basename cat grep head ls mktemp rm sed tr xargs"
+
+# Every case is named here, and every case directory must be named here.
 required_cases="
   hook-opened
   hook-step-failure
   hook-notice-on-stderr
   hook-flag-error
-  hook-required-flag-error
+  hook-crash-with-special-characters
   hook-no-open-command
-  hook-no-hook-response
   hook-missing-peasant
   hook-transcript-fallback
+  hook-session-id-beats-transcript
   hook-no-transcript
   plain-opened
+  plain-notice-on-success
+  plain-argv-beats-transcript
   plain-step-failure
   plain-notice-before-failure
   plain-no-open-command
+  plain-silent-failure
   plain-missing-peasant
 "
 for name in $required_cases; do
   check "fixture case $name exists" "[ -d \"$fixtures/cases/$name\" ]"
+done
+for dir in "$fixtures"/cases/*/; do
+  name="$(basename "$dir")"
+  case " $(printf '%s ' $required_cases)" in
+    *" $name "*) ;;
+    *) echo "FAIL: fixture case $name is not named in required_cases"; fail=1 ;;
+  esac
 done
 
 # The hook response contract, read from stdin.
@@ -77,48 +91,54 @@ import json, sys
 text = sys.stdin.read()
 assert text.endswith("\n") and text.count("\n") == 1, "not exactly one line"
 response = json.loads(text)
-assert set(response) == {"continue", "stopReason"}, sorted(response)
 assert response["continue"] is False
 assert len(response["stopReason"].split("\n")) <= 2, "stopReason has more than two lines"
+'
+
+# The directory Claude Code keeps a working directory's transcripts in: the
+# path with every non-alphanumeric character replaced by "-".
+project_dir_name='
+import re, sys
+print(re.sub(r"[^A-Za-z0-9]", "-", sys.argv[1]))
 '
 
 # case_fail NAME REASON: report one failed case.
 case_fail() { echo "FAIL: case $1: $2"; fail=1; }
 
+tmp=""
+trap '[ -z "$tmp" ] || rm -rf "$tmp"' EXIT
+trap '[ -z "$tmp" ] || rm -rf "$tmp"; exit 130' INT TERM
+
 run_case() {
-  local dir=$1 name tmp work home path stdin projects transcript status stream expect hour=0 ok=1
+  local dir=$1 name work projects tool entry stdin status stream expect hour=0 ok=1
   local -a args=()
   name="$(basename "$dir")"
   tmp="$(mktemp -d "${TMPDIR:-/tmp}/peasant-smoke.XXXXXX")"
-  mkdir -p "$tmp/work" "$tmp/home"
-  work="$(cd "$tmp/work" && pwd -P)"   # the script sees the physical path
-  home="$tmp/home"
+  mkdir -p "$tmp/bin" "$tmp/home" "$tmp/work/my.app_dir"
+  work="$(cd "$tmp/work/my.app_dir" && pwd -P)"   # the script sees the physical path
 
-  path="$fixtures/bin:/usr/bin:/bin"
-  if [ -f "$dir/no-peasant" ]; then
-    if PATH=/usr/bin:/bin command -v peasant >/dev/null 2>&1; then
-      echo "skip: case $name (a peasant binary is installed in /usr/bin or /bin)"
-      rm -rf "$tmp"
-      return
-    fi
-    path=/usr/bin:/bin
-  fi
+  for tool in $script_tools; do
+    ln -s "$(command -v "$tool")" "$tmp/bin/$tool"
+  done
+  ln -s "$fixtures/bin/open" "$tmp/bin/open"
+  ln -s "$fixtures/bin/open" "$tmp/bin/xdg-open"
+  [ -f "$dir/no-peasant" ] || ln -s "$fixtures/bin/peasant" "$tmp/bin/peasant"
 
-  if [ -d "$dir/transcripts" ]; then
-    projects="$home/.claude/projects/$(printf '%s' "$work" | sed 's#/#-#g')"
+  if [ -f "$dir/transcripts" ]; then
+    projects="$tmp/home/.claude/projects/$(python3 -c "$project_dir_name" "$work")"
     mkdir -p "$projects"
-    for transcript in "$dir"/transcripts/*.jsonl; do
+    while read -r entry; do
       hour=$((hour + 1))
-      cp "$transcript" "$projects/"
-      touch -t "20200101$(printf '%02d' "$hour")00" "$projects/$(basename "$transcript")"
-    done
+      : >"$projects/$entry.jsonl"
+      touch -t "20200101$(printf '%02d' "$hour")00" "$projects/$entry.jsonl"
+    done <"$dir/transcripts"
   fi
 
   [ ! -f "$dir/args" ] || read -r -a args <"$dir/args"
   stdin="$dir/stdin"
   [ -f "$stdin" ] || stdin=/dev/null
 
-  (cd "$work" && env -i HOME="$home" PATH="$path" TMPDIR="$tmp" \
+  (cd "$work" && env -i HOME="$tmp/home" PATH="$tmp/bin" TMPDIR="$tmp" \
     PEASANT_STUB_CASE="$dir" PEASANT_STUB_ARGV="$tmp/argv" PEASANT_STUB_BROWSER="$tmp/browser" \
     "$script" ${args[@]+"${args[@]}"} <"$stdin" >"$tmp/stdout" 2>"$tmp/stderr")
   status=$?
@@ -142,23 +162,37 @@ run_case() {
     case_fail "$name" "peasant ran, but the case expects it not to"; ok=0
   fi
   [ ! -e "$tmp/browser" ] || { case_fail "$name" "the script opened the browser itself"; ok=0; }
-  if [ -n "$(find "$tmp" -maxdepth 1 -name 'peasant-open.*')" ]; then
-    case_fail "$name" "the script left its temporary file behind"; ok=0
-  fi
+  for entry in "$tmp"/* "$tmp"/.[!.]* "$tmp"/..?*; do
+    [ -e "$entry" ] || [ -L "$entry" ] || continue
+    case "${entry##*/}" in
+      argv | bin | browser | home | stderr | stdout | work) ;;
+      *) case_fail "$name" "the script left ${entry##*/} behind"; ok=0 ;;
+    esac
+  done
   if [ "${args[0]:-}" = "--hook" ]; then
     python3 -c "$hook_response_ok" <"$tmp/stdout" >/dev/null 2>&1 \
-      || { case_fail "$name" "stdout is not one hook response with a stopReason of at most two lines"; ok=0; }
+      || { case_fail "$name" "stdout is not one hook response with continue:false and a stopReason of at most two lines"; ok=0; }
   elif [ "$(cat "$tmp/stdout" "$tmp/stderr" | wc -l)" -gt 2 ]; then
     case_fail "$name" "plain mode printed more than two lines"; ok=0
   fi
 
   [ "$ok" -eq 0 ] || echo "ok: case $name"
   rm -rf "$tmp"
+  tmp=""
 }
 
 for dir in "$fixtures"/cases/*/; do
   run_case "${dir%/}"
 done
+
+# The stub's flags must still be the real command's. This runs only when the
+# peasant on PATH has `open`, and asks it for help only.
+if peasant open --help >/dev/null 2>&1; then
+  check "the installed peasant open takes --session and --hook" \
+    "peasant open --help | grep -q -- '--session' && peasant open --help | grep -q -- '--hook'"
+else
+  echo "skip: no peasant with the open command on PATH (cannot check the stub's flags)"
+fi
 
 if command -v claude >/dev/null 2>&1; then
   check "claude plugin validate passes" "(cd \"$here\" && claude plugin validate .)"
