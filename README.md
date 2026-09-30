@@ -13,10 +13,10 @@ transcript in your browser.
 What it does when you type `/peasant`:
 
 1. Takes this session's id from Claude Code.
-2. Runs `peasant open --session <id>`. That command records this session
-   (refreshing it if already stored), starts the dashboard if it is not
-   already running, and opens this session's transcript in your browser. It
-   records ONLY this session, never the whole project.
+2. Runs `peasant open --session <id>`. That command records this session,
+   starts the dashboard if it is not already running, and opens this
+   session's transcript in your browser. It records ONLY this session, never
+   the whole project.
 3. Shows at most two lines: the result, for example
    `peasant: opened "<title>" · not published`, then the address of the
    transcript in the dashboard. If a step fails, it shows one line instead,

@@ -65,8 +65,9 @@ fi
 # failure_line DEFAULT: the one line to show when `peasant open` did not give
 # its result the normal way. Its own failure line wins wherever it is on stderr
 # (a notice may come first). Otherwise this peasant has no `open` command, or
-# the command stopped before it ran: a flag error exits 1 with usage on
-# stderr, even with --hook. DEFAULT is the reason when stderr names none.
+# the command stopped without a result line: a flag error (exit 1 with usage
+# on stderr, even with --hook), a crash, or a kill. DEFAULT is the reason when
+# stderr names none.
 failure_line() {
   local line
   line="$(printf '%s\n' "$errors" | grep -m1 '^peasant: ')"
@@ -86,8 +87,9 @@ failure_line() {
 # Run `peasant open`. Its stdout passes straight through, and in hook mode it
 # is the hook response, which `peasant open --hook` prints on every outcome
 # once its flags parse. Its stderr is kept only to find a failure line in, and
-# is dropped on success. peasant gets no fd 3, so a dashboard it starts cannot
-# hold this script's stdout open.
+# is dropped on success. peasant reads nothing from this script's stdin, which
+# in plain mode may be a terminal that a prompt would wait on. peasant gets no
+# fd 3, so a dashboard it starts cannot hold this script's stdout open.
 args=(--session "$SID")
 [ "$MODE" = plain ] || args+=(--hook)
 { errors="$(peasant open "${args[@]}" </dev/null 2>&1 >&3 3>&-)"; } 3>&1
