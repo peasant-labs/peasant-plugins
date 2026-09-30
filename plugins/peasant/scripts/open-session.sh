@@ -80,19 +80,20 @@ failure_line() {
     line="$(printf '%s\n' "$errors" | grep -m1 -E '^(Error|panic): ')"
     [ -n "$line" ] || line="$(printf '%s\n' "$errors" | sed -n '/[^[:space:]]/{p;q;}')"
     line="${line#Error: }"
-    printf 'peasant: open failed: %s; fix: run `peasant open --session %s` in a terminal to see the full error' "${line:-$1}" "$SID"
+    printf 'peasant: open failed: %s; fix: run `peasant open %s` in a terminal to see the full error' "${line:-$1}" "${args[*]}"
   fi
 }
 
 # Run `peasant open`. Its stdout passes straight through, and in hook mode it
 # is the hook response, which `peasant open --hook` prints on every outcome
 # once its flags parse. Its stderr is kept only to find a failure line in, and
-# is dropped on success. peasant reads nothing from this script's stdin, which
-# in plain mode may be a terminal that a prompt would wait on. peasant gets no
-# fd 3, so a dashboard it starts cannot hold this script's stdout open.
+# is dropped on success. Its stdin is an empty pipe: not this script's stdin,
+# which in plain mode may be a terminal that a prompt would wait on, and not
+# /dev/null, a character device that peasant takes for a terminal. peasant
+# gets no fd 3, so a dashboard it starts cannot hold this script's stdout open.
 args=(--session "$SID")
 [ "$MODE" = plain ] || args+=(--hook)
-{ errors="$(peasant open "${args[@]}" </dev/null 2>&1 >&3 3>&-)"; } 3>&1
+{ errors="$(: | peasant open "${args[@]}" 2>&1 >&3 3>&-)"; } 3>&1
 status=$?
 [ "$status" -ne 0 ] || exit 0
 report "$(failure_line "peasant exited with status $status and printed no error")"

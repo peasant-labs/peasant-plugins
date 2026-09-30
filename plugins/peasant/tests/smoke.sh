@@ -45,13 +45,14 @@ check "hooks.json calls the bundled script in hook mode" "grep -q 'open-session.
 #   expect.argv    the arguments the stub received, one per line (absent: the
 #                  stub must not run)
 #
-# Every run must also exit 0, never call a browser opener (peasant open opens
-# the browser itself), and never pass its stdin or any descriptor above 2 on
-# to peasant (the dashboard peasant starts would inherit it, and one that
-# points at the script's stdout would hold the hook's output open). The runner
-# closes descriptors 3 to 9 before it starts the script. A hook run must
-# print one hook response with continue:false and a stopReason of at most two
-# lines, and a plain run at most two lines in all.
+# Every run must also exit 0 and never call a browser opener (peasant open
+# opens the browser itself). peasant must get an empty stdin that is not a
+# character device, which peasant takes for a terminal, and no descriptor above
+# 2: the dashboard peasant starts would inherit it, and one that points at the
+# script's stdout would hold the hook's output open. The runner closes
+# descriptors 3 to 9 before it starts the script. A hook run must print one
+# hook response with continue:false and a stopReason of at most two lines, and
+# a plain run at most two lines in all.
 #
 # The tools the script may run, taken from /usr/bin and /bin first so a macOS
 # run uses the system's BSD tools and bash. A tool the script starts using
@@ -188,7 +189,7 @@ run_case() {
     case_fail "$name" "peasant ran, but the case expects it not to"; ok=0
   fi
   [ ! -e "$tmp/browser" ] || { case_fail "$name" "the script opened the browser itself"; ok=0; }
-  [ ! -s "$tmp/stub-stdin" ] || { case_fail "$name" "peasant read the script's stdin"; ok=0; }
+  [ ! -s "$tmp/stub-stdin" ] || { case_fail "$name" "peasant's stdin was not an empty pipe: $(head -1 "$tmp/stub-stdin")"; ok=0; }
   [ ! -e "$tmp/stub-fds" ] || { case_fail "$name" "peasant got open descriptors: $(tr '\n' ' ' <"$tmp/stub-fds")"; ok=0; }
   if [ "${args[0]:-}" = "--hook" ]; then
     python3 -c "$hook_response_ok" <"$tmp/stdout" >/dev/null 2>&1 \

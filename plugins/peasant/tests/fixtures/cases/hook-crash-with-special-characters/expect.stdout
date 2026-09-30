@@ -1,1 +1,1 @@
-{"continue":false,"stopReason":"peasant: open failed: panic: record \"a\\b\"not stored; fix: run `peasant open --session 4f7c2a9e-1b3d-4e8f-9a6c-2d5e7f8a1b3c` in a terminal to see the full error"}
+{"continue":false,"stopReason":"peasant: open failed: panic: record \"a\\b\"not stored; fix: run `peasant open --session 4f7c2a9e-1b3d-4e8f-9a6c-2d5e7f8a1b3c --hook` in a terminal to see the full error"}
