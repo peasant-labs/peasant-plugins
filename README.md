@@ -42,7 +42,8 @@ See https://github.com/peasant-labs/peasant. With an older peasant, `/peasant`
 prints one line that asks you to run `peasant upgrade`, or
 `peasant upgrade --prerelease` if that finds no newer release. A Homebrew
 install gets stable releases only, so it gets `peasant open` with the first
-stable release that has it.
+stable release that has it. A peasant older than v0.5.0 has no `upgrade`
+command; reinstall it from https://github.com/peasant-labs/peasant/releases.
 
 ## Install
 

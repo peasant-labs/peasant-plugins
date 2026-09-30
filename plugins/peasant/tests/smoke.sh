@@ -37,7 +37,9 @@ check "hooks.json calls the bundled script in hook mode" "grep -q 'open-session.
 #   stdin          the hook input (absent: a line peasant must never read)
 #   no-peasant     run with no peasant on PATH
 #   transcripts    Claude Code transcript names, oldest first, created in
-#                  ~/.claude/projects/<cwd> for the newest-transcript fallback
+#                  ~/.claude/projects/<cwd> for the newest-transcript fallback.
+#                  A fallback case puts the newest in the middle by name, so
+#                  name order cannot pass for time order.
 #   stub.stdout, stub.stderr, stub.exit
 #                  what the stub peasant prints, and its exit status
 #   expect.stdout, expect.stderr
@@ -46,10 +48,10 @@ check "hooks.json calls the bundled script in hook mode" "grep -q 'open-session.
 #                  stub must not run)
 #
 # Every run must also exit 0 and never call a browser opener (peasant open
-# opens the browser itself). peasant must get an empty stdin that is not a
-# character device, which peasant takes for a terminal, and no descriptor above
-# 2: the dashboard peasant starts would inherit it, and one that points at the
-# script's stdout would hold the hook's output open. The runner closes
+# opens the browser itself). peasant must get an empty pipe or file on stdin,
+# as peasant would see it (not a character device, not closed), and no
+# descriptor above 2: the dashboard peasant starts would inherit it, and one
+# that points at the script's stdout would hold the hook's output open. The runner closes
 # descriptors 3 to 9 before it starts the script. A hook run must print one
 # hook response with continue:false and a stopReason of at most two lines, and
 # a plain run at most two lines in all.

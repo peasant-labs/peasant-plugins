@@ -1,15 +1,21 @@
 #!/usr/bin/env bash
 # Stub `peasant` for tests/smoke.sh. It replays the case directory named by
 # PEASANT_STUB_CASE. It appends its arguments, one per line, to the file named
-# by PEASANT_STUB_ARGV, writes to the file named by PEASANT_STUB_STDIN whatever
-# it gets on stdin (and a note when stdin is a character device, which peasant
-# takes for a terminal), and lists in PEASANT_STUB_FDS each descriptor from 3
-# to 9 it got open. Then it prints stub.stdout on stdout and stub.stderr on stderr,
+# by PEASANT_STUB_ARGV. It writes to the file named by PEASANT_STUB_STDIN
+# whatever it reads on stdin, or a note when stdin is not an empty pipe or file
+# as peasant would see it: a character device, or closed (Go reopens a closed
+# stdin as /dev/null). It lists in PEASANT_STUB_FDS each descriptor from 3 to 9
+# it got open. Then it prints stub.stdout on stdout and stub.stderr on stderr,
 # and exits with the status in stub.exit (0 when the file is absent).
 set -u
 printf '%s\n' "$@" >> "$PEASANT_STUB_ARGV"
-[ ! -c /dev/stdin ] || echo "(stdin is a character device)" >> "$PEASANT_STUB_STDIN"
-cat >> "$PEASANT_STUB_STDIN"
+if [ ! -e /dev/stdin ]; then
+  echo "(stdin is closed)" >> "$PEASANT_STUB_STDIN"
+elif [ -c /dev/stdin ]; then
+  echo "(stdin is a character device)" >> "$PEASANT_STUB_STDIN"
+else
+  cat >> "$PEASANT_STUB_STDIN"
+fi
 for fd in 3 4 5 6 7 8 9; do
   if { : >&"$fd"; } 2>/dev/null; then echo "$fd" >> "$PEASANT_STUB_FDS"; fi
 done

@@ -66,15 +66,15 @@ fi
 # its result the normal way. Its own failure line wins wherever it is on stderr
 # (a notice may come first). Otherwise this peasant has no `open` command, or
 # the command stopped without a result line: a flag error (exit 1 with usage
-# on stderr, even with --hook), a crash, or a kill. DEFAULT is the reason when
-# stderr names none.
+# on stderr, even with --hook), a crash, or a kill. It reads the captured
+# $errors and the call's $args. DEFAULT is the reason when stderr names none.
 failure_line() {
   local line
   line="$(printf '%s\n' "$errors" | grep -m1 '^peasant: ')"
   if [ -n "$line" ]; then
     printf '%s' "$line"
   elif printf '%s\n' "$errors" | grep -q 'unknown command "open"'; then
-    printf '%s' 'peasant: open failed: this peasant has no open command; fix: run `peasant upgrade`, or `peasant upgrade --prerelease` if that finds no newer release (Homebrew installs get stable releases only)'
+    printf '%s' 'peasant: open failed: this peasant has no open command; fix: run `peasant upgrade`, or `peasant upgrade --prerelease` if that finds no newer release (Homebrew installs get stable releases only; a peasant older than v0.5.0 has no upgrade command, so reinstall it from https://github.com/peasant-labs/peasant/releases)'
   else
     # The error itself, not a notice printed before it.
     line="$(printf '%s\n' "$errors" | grep -m1 -E '^(Error|panic): ')"
