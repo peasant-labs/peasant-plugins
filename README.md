@@ -14,13 +14,14 @@ What it does when you type `/peasant`:
 
 1. Takes this session's id from Claude Code.
 2. Runs `peasant open --session <id>`. That command records this session
-   (refreshing it if already stored, with commit detection), starts the
-   dashboard if it is not already running, and opens this session's transcript
-   in your browser. It records ONLY this session, never the whole project.
-3. Shows at most two lines: `peasant: opened "<title>" · not published` (or
-   `· published`), then the address of the transcript in the dashboard. If a
-   step fails, it shows one line instead, which names the step, the reason,
-   and the command that fixes it. `peasant open --help` describes the output.
+   (refreshing it if already stored), starts the dashboard if it is not
+   already running, and opens this session's transcript in your browser. It
+   records ONLY this session, never the whole project.
+3. Shows at most two lines: the result, for example
+   `peasant: opened "<title>" · not published`, then the address of the
+   transcript in the dashboard. If a step fails, it shows one line instead,
+   which names the step, the reason, and the command that fixes it.
+   `peasant open --help` describes the output.
 
 The plugin's bundled script (`plugins/peasant/scripts/open-session.sh`) is a
 thin shim over `peasant open`: it finds the session id and passes the
@@ -39,7 +40,9 @@ You must have the `peasant` binary installed and on your `PATH`, in a release
 that has the `peasant open` command. This plugin does not install or bundle it.
 See https://github.com/peasant-labs/peasant. With an older peasant, `/peasant`
 prints one line that asks you to run `peasant upgrade`, or
-`peasant upgrade --prerelease` while only a pre-release has `peasant open`.
+`peasant upgrade --prerelease` if that finds no newer release. A Homebrew
+install gets stable releases only, so it gets `peasant open` with the first
+stable release that has it.
 
 ## Install
 

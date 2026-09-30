@@ -34,7 +34,7 @@ check "hooks.json calls the bundled script in hook mode" "grep -q 'open-session.
 # and the stub peasant (tests/fixtures/bin/peasant). A case has these files:
 #
 #   args           the script's arguments on one line (--hook: hook mode)
-#   stdin          the hook input (absent: empty stdin)
+#   stdin          the hook input (absent: a line peasant must never read)
 #   no-peasant     run with no peasant on PATH
 #   transcripts    Claude Code transcript names, oldest first, created in
 #                  ~/.claude/projects/<cwd> for the newest-transcript fallback
@@ -46,40 +46,52 @@ check "hooks.json calls the bundled script in hook mode" "grep -q 'open-session.
 #                  stub must not run)
 #
 # Every run must also exit 0, never call a browser opener (peasant open opens
-# the browser itself), and leave no file of its own behind. A hook run must
+# the browser itself), and never pass its stdin or an open fd 3 on to peasant
+# (the dashboard peasant starts would inherit fd 3, which the script points at
+# its own stdout, and hold the hook's output open). A hook run must
 # print one hook response with continue:false and a stopReason of at most two
 # lines, and a plain run at most two lines in all.
 #
-# The tools the script may run. A tool it starts using must be added here.
-script_tools="bash basename cat grep head ls mktemp rm sed tr xargs"
+# The tools the script may run, taken from /usr/bin and /bin first so a macOS
+# run uses the system's BSD tools and bash. A tool the script starts using
+# must be added here.
+script_tools="bash basename cat grep head ls sed tr xargs"
 
-# Every case is named here, and every case directory must be named here.
+# Every case is named here, and every case directory must be named here. A
+# name:file entry also requires that file, where deleting it would leave the
+# case passing as a copy of another.
 required_cases="
   hook-opened
   hook-step-failure
-  hook-notice-on-stderr
+  hook-notice-on-stderr:stub.stderr
   hook-flag-error
   hook-crash-with-special-characters
+  hook-silent-failure
+  hook-notice-before-crash:stub.stderr
   hook-no-open-command
   hook-missing-peasant
   hook-transcript-fallback
-  hook-session-id-beats-transcript
+  hook-session-id-beats-transcript:transcripts
   hook-no-transcript
   plain-opened
-  plain-notice-on-success
-  plain-argv-beats-transcript
+  plain-notice-on-success:stub.stderr
+  plain-argv-beats-transcript:transcripts
   plain-step-failure
   plain-notice-before-failure
   plain-no-open-command
   plain-silent-failure
   plain-missing-peasant
 "
-for name in $required_cases; do
+required_names=" "
+for entry in $required_cases; do
+  name="${entry%%:*}"
+  required_names="$required_names$name "
   check "fixture case $name exists" "[ -d \"$fixtures/cases/$name\" ]"
+  [ "$name" = "$entry" ] || check "fixture case $name has ${entry#*:}" "[ -f \"$fixtures/cases/$name/${entry#*:}\" ]"
 done
 for dir in "$fixtures"/cases/*/; do
   name="$(basename "$dir")"
-  case " $(printf '%s ' $required_cases)" in
+  case "$required_names" in
     *" $name "*) ;;
     *) echo "FAIL: fixture case $name is not named in required_cases"; fail=1 ;;
   esac
@@ -110,15 +122,15 @@ trap '[ -z "$tmp" ] || rm -rf "$tmp"' EXIT
 trap '[ -z "$tmp" ] || rm -rf "$tmp"; exit 130' INT TERM
 
 run_case() {
-  local dir=$1 name work projects tool entry stdin status stream expect hour=0 ok=1
-  local -a args=()
+  local dir=$1 name work projects tool name_line stdin status stream expect i n ok=1
+  local -a args=() transcripts=()
   name="$(basename "$dir")"
   tmp="$(mktemp -d "${TMPDIR:-/tmp}/peasant-smoke.XXXXXX")"
   mkdir -p "$tmp/bin" "$tmp/home" "$tmp/work/my.app_dir"
   work="$(cd "$tmp/work/my.app_dir" && pwd -P)"   # the script sees the physical path
 
   for tool in $script_tools; do
-    ln -s "$(command -v "$tool")" "$tmp/bin/$tool"
+    ln -s "$(PATH="/usr/bin:/bin:$PATH" command -v "$tool")" "$tmp/bin/$tool"
   done
   ln -s "$fixtures/bin/open" "$tmp/bin/open"
   ln -s "$fixtures/bin/open" "$tmp/bin/xdg-open"
@@ -127,19 +139,29 @@ run_case() {
   if [ -f "$dir/transcripts" ]; then
     projects="$tmp/home/.claude/projects/$(python3 -c "$project_dir_name" "$work")"
     mkdir -p "$projects"
-    while read -r entry; do
-      hour=$((hour + 1))
-      : >"$projects/$entry.jsonl"
-      touch -t "20200101$(printf '%02d' "$hour")00" "$projects/$entry.jsonl"
-    done <"$dir/transcripts"
+    while read -r name_line; do transcripts+=("$name_line"); done <"$dir/transcripts"
+    # Create the newest first and give access times the reverse order, so only
+    # the modification time puts the transcripts oldest to newest.
+    n=${#transcripts[@]}
+    i=$n
+    while [ "$i" -gt 0 ]; do
+      i=$((i - 1))
+      : >"$projects/${transcripts[i]}.jsonl"
+      touch -m -t "20200101$(printf '%02d' $((i + 1)))00" "$projects/${transcripts[i]}.jsonl"
+      touch -a -t "20200102$(printf '%02d' $((n - i)))00" "$projects/${transcripts[i]}.jsonl"
+    done
   fi
 
   [ ! -f "$dir/args" ] || read -r -a args <"$dir/args"
   stdin="$dir/stdin"
-  [ -f "$stdin" ] || stdin=/dev/null
+  if [ ! -f "$stdin" ]; then
+    stdin="$tmp/stdin"
+    printf 'the script must not pass this on to peasant\n' >"$stdin"
+  fi
 
-  (cd "$work" && env -i HOME="$tmp/home" PATH="$tmp/bin" TMPDIR="$tmp" \
-    PEASANT_STUB_CASE="$dir" PEASANT_STUB_ARGV="$tmp/argv" PEASANT_STUB_BROWSER="$tmp/browser" \
+  (cd "$work" && env -i HOME="$tmp/home" PATH="$tmp/bin" \
+    PEASANT_STUB_CASE="$dir" PEASANT_STUB_ARGV="$tmp/argv" PEASANT_STUB_STDIN="$tmp/stub-stdin" \
+    PEASANT_STUB_FD3="$tmp/stub-fd3" PEASANT_STUB_BROWSER="$tmp/browser" \
     "$script" ${args[@]+"${args[@]}"} <"$stdin" >"$tmp/stdout" 2>"$tmp/stderr")
   status=$?
 
@@ -162,13 +184,8 @@ run_case() {
     case_fail "$name" "peasant ran, but the case expects it not to"; ok=0
   fi
   [ ! -e "$tmp/browser" ] || { case_fail "$name" "the script opened the browser itself"; ok=0; }
-  for entry in "$tmp"/* "$tmp"/.[!.]* "$tmp"/..?*; do
-    [ -e "$entry" ] || [ -L "$entry" ] || continue
-    case "${entry##*/}" in
-      argv | bin | browser | home | stderr | stdout | work) ;;
-      *) case_fail "$name" "the script left ${entry##*/} behind"; ok=0 ;;
-    esac
-  done
+  [ ! -s "$tmp/stub-stdin" ] || { case_fail "$name" "peasant read the script's stdin"; ok=0; }
+  [ ! -e "$tmp/stub-fd3" ] || { case_fail "$name" "peasant got an open fd 3"; ok=0; }
   if [ "${args[0]:-}" = "--hook" ]; then
     python3 -c "$hook_response_ok" <"$tmp/stdout" >/dev/null 2>&1 \
       || { case_fail "$name" "stdout is not one hook response with continue:false and a stopReason of at most two lines"; ok=0; }
@@ -189,7 +206,7 @@ done
 # peasant on PATH has `open`, and asks it for help only.
 if peasant open --help >/dev/null 2>&1; then
   check "the installed peasant open takes --session and --hook" \
-    "peasant open --help | grep -q -- '--session' && peasant open --help | grep -q -- '--hook'"
+    "peasant open --help | grep -Eq -- '^ +--session string ' && peasant open --help | grep -Eq -- '^ +--hook( |\$)'"
 else
   echo "skip: no peasant with the open command on PATH (cannot check the stub's flags)"
 fi

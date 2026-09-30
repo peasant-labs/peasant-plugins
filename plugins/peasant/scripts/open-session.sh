@@ -54,15 +54,13 @@ command -v peasant >/dev/null 2>&1 || report "ERROR: the 'peasant' binary is not
 # Fall back to the newest transcript for this directory when no session id was
 # supplied (older Claude Code, or a skill synced from claude.ai). Claude Code
 # names the directory after the path with every non-alphanumeric character
-# replaced by '-'.
+# replaced by '-'. This matches it for ASCII paths; Claude Code also shortens
+# names over 200 characters, which this fallback does not.
 if [ -z "$SID" ]; then
   dir="$HOME/.claude/projects/$(printf '%s' "$PWD" | LC_ALL=C sed 's#[^A-Za-z0-9]#-#g')"
   SID="$(ls -t "$dir"/*.jsonl 2>/dev/null | head -1 | xargs -r -n1 basename 2>/dev/null | sed 's/\.jsonl$//')"
 fi
 [ -n "$SID" ] || report "ERROR: no Claude Code transcript found for this directory"
-
-errors="$(mktemp "${TMPDIR:-/tmp}/peasant-open.XXXXXX" 2>/dev/null)" || report "ERROR: could not create a temporary file for the output of 'peasant open'"
-trap 'rm -f "$errors"' EXIT
 
 # failure_line DEFAULT: the one line to show when `peasant open` did not give
 # its result the normal way. Its own failure line wins wherever it is on stderr
@@ -71,32 +69,28 @@ trap 'rm -f "$errors"' EXIT
 # stderr, even with --hook. DEFAULT is the reason when stderr names none.
 failure_line() {
   local line
-  line="$(grep -m1 '^peasant: ' "$errors")"
+  line="$(printf '%s\n' "$errors" | grep -m1 '^peasant: ')"
   if [ -n "$line" ]; then
     printf '%s' "$line"
-  elif grep -q 'unknown command "open"' "$errors"; then
-    printf '%s' 'peasant: open failed: this peasant has no open command; fix: run `peasant upgrade`, or `peasant upgrade --prerelease` if that finds no newer release'
+  elif printf '%s\n' "$errors" | grep -q 'unknown command "open"'; then
+    printf '%s' 'peasant: open failed: this peasant has no open command; fix: run `peasant upgrade`, or `peasant upgrade --prerelease` if that finds no newer release (Homebrew installs get stable releases only)'
   else
-    line="$(sed -n '/[^[:space:]]/{p;q;}' "$errors")"
+    # The error itself, not a notice printed before it.
+    line="$(printf '%s\n' "$errors" | grep -m1 -E '^(Error|panic): ')"
+    [ -n "$line" ] || line="$(printf '%s\n' "$errors" | sed -n '/[^[:space:]]/{p;q;}')"
     line="${line#Error: }"
     printf 'peasant: open failed: %s; fix: run `peasant open --session %s` in a terminal to see the full error' "${line:-$1}" "$SID"
   fi
 }
 
-if [ "$MODE" = hook ]; then
-  out="$(peasant open --session "$SID" --hook </dev/null 2>"$errors")"
-  status=$?
-  # Once its flags parse, `peasant open --hook` prints the hook response and
-  # exits 0 on every outcome. Pass the response through unchanged.
-  if [ "$status" -eq 0 ]; then
-    printf '%s\n' "$out"
-    exit 0
-  fi
-  report "$(failure_line "peasant exited with status $status and printed no error")"
-fi
-
-# Plain mode: the lines on stdout pass straight through.
-peasant open --session "$SID" </dev/null 2>"$errors"
+# Run `peasant open`. Its stdout passes straight through, and in hook mode it
+# is the hook response, which `peasant open --hook` prints on every outcome
+# once its flags parse. Its stderr is kept only to find a failure line in, and
+# is dropped on success. peasant gets no fd 3, so a dashboard it starts cannot
+# hold this script's stdout open.
+args=(--session "$SID")
+[ "$MODE" = plain ] || args+=(--hook)
+{ errors="$(peasant open "${args[@]}" </dev/null 2>&1 >&3 3>&-)"; } 3>&1
 status=$?
 [ "$status" -ne 0 ] || exit 0
 report "$(failure_line "peasant exited with status $status and printed no error")"

@@ -1,1 +1,1 @@
-peasant: open failed: this peasant has no open command; fix: run `peasant upgrade`, or `peasant upgrade --prerelease` if that finds no newer release
+peasant: open failed: this peasant has no open command; fix: run `peasant upgrade`, or `peasant upgrade --prerelease` if that finds no newer release (Homebrew installs get stable releases only)

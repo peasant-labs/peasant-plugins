@@ -35,8 +35,8 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/open-session.sh ${CLAUDE_SESSION_ID} 2>&1
 ## Relay
 
 - Print the lines above for the user exactly as they are. Do nothing else.
-  There are at most two: `peasant: opened "<title>" · <state>` and the
-  transcript address, or one line that says what failed and how to fix it.
+  There are at most two: the result and the transcript address, or one line
+  that says what failed and how to fix it.
 
 Do not harvest, start the dashboard, or open anything yourself — `peasant open`
 already did the whole flow and opened the browser.

@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
 # Stub `peasant` for tests/smoke.sh. It replays the case directory named by
 # PEASANT_STUB_CASE: it appends its arguments, one per line, to the file named
-# by PEASANT_STUB_ARGV, prints stub.stdout on stdout and stub.stderr on stderr,
-# and exits with the status in stub.exit (0 when the file is absent).
+# by PEASANT_STUB_ARGV, copies whatever it gets on stdin to the file named by
+# PEASANT_STUB_STDIN, notes in PEASANT_STUB_FD3 whether it got an open fd 3,
+# prints stub.stdout on stdout and stub.stderr on stderr, and exits with the
+# status in stub.exit (0 when the file is absent).
 set -u
 printf '%s\n' "$@" >> "$PEASANT_STUB_ARGV"
+cat > "$PEASANT_STUB_STDIN"
+if { : >&3; } 2>/dev/null; then echo open >> "$PEASANT_STUB_FD3"; fi
 [ ! -f "$PEASANT_STUB_CASE/stub.stdout" ] || cat "$PEASANT_STUB_CASE/stub.stdout"
 [ ! -f "$PEASANT_STUB_CASE/stub.stderr" ] || cat "$PEASANT_STUB_CASE/stub.stderr" >&2
 status=0
