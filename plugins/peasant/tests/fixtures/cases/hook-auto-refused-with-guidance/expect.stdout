@@ -1,0 +1,1 @@
+{"continue":false,"stopReason":"peasant: auto failed: the rule is saved, but the pre-push hook was not installed in /home/dev/app, so that event does not publish yet; follow the guidance printed above; fix: run `peasant village auto` in this repository in a terminal to see the full output"}
