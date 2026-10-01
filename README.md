@@ -78,3 +78,7 @@ Then type `/peasant` in any session.
   targets Claude Code sessions.
 - Because the hook stops the command processing, the result renders as a
   user-facing note carrying the two lines, not as an assistant message.
+
+- Hook string values with Unicode or control-character JSON escapes are refused
+  before any command runs. Use the named terminal command when that happens;
+  the shim never guesses a repository path from an unsupported escape.

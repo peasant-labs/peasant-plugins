@@ -41,20 +41,27 @@ set -uo pipefail
 # hook_field NAME: the string value of NAME in the hook input, with the JSON
 # escapes \\, \" and \/ undone. Empty when the input has no NAME.
 hook_field() {
-  printf '%s' "$input" \
-    | LC_ALL=C sed -n -E 's/.*"'"$1"'"[[:space:]]*:[[:space:]]*"(([^"\\]|\\.)*)".*/\1/p' \
-    | head -1 | LC_ALL=C sed -E 's/\\(.)/\1/g'
+  local escaped remaining
+  escaped="$(printf '%s' "$input" \
+    | LC_ALL=C sed -n -E 's/.*"'"$1"'"[[:space:]]*:[[:space:]]*"(([^"\\]|\\.)*)".*/\1/p' | head -1)"
+  # Only the escapes decoded below may reach a repository or session decision.
+  # Removing supported pairs first distinguishes a literal backslash followed
+  # by "u" from a Unicode escape. Unsupported escapes never become a guess.
+  remaining="$(printf '%s' "$escaped" | LC_ALL=C sed -E 's/\\[\\"/]//g')"
+  case "$remaining" in *\\*) return 1 ;; esac
+  printf '%s' "$escaped" | LC_ALL=C sed -E 's/\\(.)/\1/g'
 }
 
 MODE=plain
 ARGS=""
 DIR=""
+UNSUPPORTED_ESCAPE=false
 if [ "${1:-}" = "--hook" ]; then
   MODE=hook
   input="$(cat)"
-  SID="$(hook_field session_id)"
-  ARGS="$(hook_field command_args)"
-  DIR="$(hook_field cwd)"
+  SID="$(hook_field session_id)" || UNSUPPORTED_ESCAPE=true
+  ARGS="$(hook_field command_args)" || UNSUPPORTED_ESCAPE=true
+  DIR="$(hook_field cwd)" || UNSUPPORTED_ESCAPE=true
 else
   if [ "${1:-}" = "--args" ]; then
     ARGS="${2:-}"
@@ -78,6 +85,10 @@ report() {
   fi
   exit 0
 }
+
+if [ "$UNSUPPORTED_ESCAPE" = true ]; then
+  report "ERROR: the hook input uses an unsupported JSON escape; no command ran; run peasant open or peasant village auto in this repository in a terminal"
+fi
 
 command -v peasant >/dev/null 2>&1 || report "ERROR: the 'peasant' binary is not on your PATH"
 
