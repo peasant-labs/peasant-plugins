@@ -24,7 +24,7 @@ whole project.
 The `UserPromptExpansion` hook in `hooks/hooks.json` handles `/peasant` before
 this skill ever expands, so Claude is not invoked and no tokens are spent. You
 are seeing this message because that hook did NOT run (for example, hooks are
-disabled by policy). Run the script below to do the same work yourself.
+disabled by policy). The injected script below already ran in its place; relay its output.
 
 ## Run (fallback only)
 
