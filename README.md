@@ -34,6 +34,20 @@ as a normal user-facing note.
 If hooks are disabled by policy, the skill body runs the same script as a
 fallback, and that path does spend a turn.
 
+### `/peasant auto`
+
+After publishing a session to your chosen collectives, type `/peasant auto`
+in that repository to use those destinations on subsequent git pushes.
+The command delegates to `peasant village auto`; Peasant decides whether
+the repository and prior publication provide the required consent. A refusal
+explains the next step. This requires a release that also provides
+`peasant village auto`.
+
+Deleting or pausing the last matching auto-publish binding stops its hook
+from publishing. Another active binding for the same repository and event
+can still authorize it. Hooks installed separately in a terminal keep their
+own consent.
+
 ## Prerequisite
 
 You must have the `peasant` binary installed and on your `PATH`, in a release
