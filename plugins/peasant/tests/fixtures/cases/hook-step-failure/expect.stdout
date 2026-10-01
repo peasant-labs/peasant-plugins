@@ -1,0 +1,1 @@
+{"continue":false,"stopReason":"peasant: harvest failed: peasant open refused to run: the maximum redaction level is not supported in this version; fix: run `peasant harvest --session 4f7c2a9e-1b3d-4e8f-9a6c-2d5e7f8a1b3c --force --detect-commits` to see the full report"}

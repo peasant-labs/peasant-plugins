@@ -1,0 +1,1 @@
+peasant: dashboard start failed: failed to start background server: fork/exec peasant: permission denied; fix: run `peasant web start --foreground --port 8690` to see why, or pass --port with a free port
