@@ -29,7 +29,7 @@ disabled by policy). The injected script below already ran in its place; relay i
 ## Run (fallback only)
 
 ```!
-${CLAUDE_PLUGIN_ROOT}/scripts/open-session.sh ${CLAUDE_SESSION_ID} 2>&1
+"${CLAUDE_PLUGIN_ROOT}/scripts/open-session.sh" "${CLAUDE_SESSION_ID}" 2>&1
 ```
 
 ## Relay
