@@ -24,8 +24,9 @@ What it does when you type `/peasant`:
    `peasant open --help` describes the output.
 
 The plugin's bundled script (`plugins/peasant/scripts/open-session.sh`) is a
-thin shim over `peasant open`: it finds the session id and passes the
-command's output on. A `UserPromptExpansion` hook (`plugins/peasant/hooks/hooks.json`)
+thin shim over `peasant open` and `peasant village auto`: it selects the
+command from the invocation arguments, runs it in the session's directory, and
+passes the command's output on. A `UserPromptExpansion` hook (`plugins/peasant/hooks/hooks.json`)
 runs it in hook mode, where `peasant open --hook` answers with a `stopReason`
 that stops the command expansion. Claude never processes the prompt, so
 `/peasant` costs no tokens and the agent does not reply. The two lines appear
@@ -80,5 +81,7 @@ Then type `/peasant` in any session.
   user-facing note carrying the two lines, not as an assistant message.
 
 - Hook string values with Unicode or control-character JSON escapes are refused
-  before any command runs. Use the named terminal command when that happens;
-  the shim never guesses a repository path from an unsupported escape.
+  before the command that needs them runs. `/peasant auto` refuses an escaped
+  directory; `/peasant` does not read the directory and still opens the
+  session. Use the named terminal command when a refusal happens; the shim
+  never guesses a repository path from an unsupported escape.

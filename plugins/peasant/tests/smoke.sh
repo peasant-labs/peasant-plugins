@@ -41,6 +41,8 @@ check "hooks.json calls the bundled script in hook mode" "grep -q 'open-session.
 #                  name holds a space, a double quote and a backslash, escaped
 #                  as JSON escapes it
 #   no-peasant     run with no peasant on PATH
+#   no-tmpdir      run with TMPDIR pointing at a path that does not exist, so
+#                  the case proves the script needs no usable temporary storage
 #   transcripts    Claude Code transcript names, oldest first, created in
 #                  ~/.claude/projects/<cwd> for the newest-transcript fallback.
 #                  A fallback case puts the newest in the middle by name, so
@@ -67,12 +69,12 @@ check "hooks.json calls the bundled script in hook mode" "grep -q 'open-session.
 # The tools the script may run, taken from /usr/bin and /bin first so a macOS
 # run uses the system's BSD tools and bash. A tool the script starts using
 # must be added here.
-script_tools="bash basename cat grep head ls mktemp rm sed tr xargs"
+script_tools="bash basename cat grep head ls sed tr xargs"
 
 # Every case is named here, and every case directory must be named here. A
 # name:file entry also requires that file, where deleting it would leave the
 # case passing as a copy of another.
-required_cases="$(python3 -c 'import json,sys; print("\n".join(json.load(open(sys.argv[1]))))' "$fixtures/required-cases.yaml")"
+required_cases="$(python3 -c 'import json,sys; print("\n".join(json.load(open(sys.argv[1]))))' "$fixtures/required-cases.json")"
 required_names=" "
 for entry in $required_cases; do
   name="${entry%%:*}"
@@ -122,7 +124,7 @@ trap '[ -z "$tmp" ] || rm -rf "$tmp"' EXIT
 trap '[ -z "$tmp" ] || rm -rf "$tmp"; exit 130' INT TERM
 
 run_case() {
-  local dir=$1 name work session projects tool name_line arg stdin status stream expect want i n ok=1
+  local dir=$1 name work session projects tool name_line arg stdin status stream expect want i n ok=1 case_tmpdir
   local -a args=() transcripts=()
   name="$(basename "$dir")"
   tmp="$(mktemp -d "${TMPDIR:-/tmp}/peasant-smoke.XXXXXX")"
@@ -167,7 +169,10 @@ run_case() {
     printf 'the script must not pass this on to peasant\n' >"$stdin"
   fi
 
-  (cd "$work" && env -i HOME="$tmp/home" PATH="$tmp/bin" TMPDIR="$tmp/tmp" \
+  case_tmpdir="$tmp/tmp"
+  [ -f "$dir/no-tmpdir" ] && case_tmpdir="$tmp/missing/tmp"
+
+  (cd "$work" && env -i HOME="$tmp/home" PATH="$tmp/bin" TMPDIR="$case_tmpdir" \
     PEASANT_STUB_CASE="$dir" PEASANT_STUB_ARGV="$tmp/argv" PEASANT_STUB_STDIN="$tmp/stub-stdin" \
     PEASANT_STUB_FDS="$tmp/stub-fds" PEASANT_STUB_CWD="$tmp/stub-cwd" PEASANT_STUB_BROWSER="$tmp/browser" \
     "$script" ${args[@]+"${args[@]}"} <"$stdin" >"$tmp/stdout" 2>"$tmp/stderr" \
@@ -228,6 +233,18 @@ if peasant open --help >/dev/null 2>&1; then
     "peasant open --help | grep -Eq -- '^ +--session string ' && peasant open --help | grep -Eq -- '^ +--hook( |\$)'"
 else
   echo "skip: no peasant with the open command on PATH (cannot check the stub's flags)"
+fi
+
+# The auto path assumes `peasant village auto` exists and takes no arguments.
+# Anchor that on the real command when one is on PATH: `peasant village --help`
+# lists the row, and asking the command itself for help exits 0. An older
+# binary lacks the row and exits 0 with the parent help, which the
+# hook-auto-no-auto-command fixture reproduces.
+if peasant village --help 2>/dev/null | grep -Eq -- '^ +auto( |$)'; then
+  check "the installed peasant has the village auto command" \
+    "peasant village auto --help >/dev/null 2>&1"
+else
+  echo "skip: no peasant with the village auto command on PATH"
 fi
 
 if command -v claude >/dev/null 2>&1; then

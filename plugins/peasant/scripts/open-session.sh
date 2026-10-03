@@ -61,7 +61,11 @@ if [ "${1:-}" = "--hook" ]; then
   input="$(cat)"
   SID="$(hook_field session_id)" || UNSUPPORTED_ESCAPE=true
   ARGS="$(hook_field command_args)" || UNSUPPORTED_ESCAPE=true
-  DIR="$(hook_field cwd)" || UNSUPPORTED_ESCAPE=true
+  # cwd is read only for `auto`, the one command that uses it. An unsupported
+  # escape there must not stop an open, which never reads the directory.
+  if [ "$ARGS" = auto ]; then
+    DIR="$(hook_field cwd)" || UNSUPPORTED_ESCAPE=true
+  fi
 else
   if [ "${1:-}" = "--args" ]; then
     ARGS="${2:-}"
@@ -136,16 +140,22 @@ auto_failure_line() {
   printf 'peasant: auto failed: %s%s' "${reason:-$1}" "$fix"
 }
 
-# /peasant auto. peasant's stdout is kept in a temporary file to be checked
-# for the result line, and the file is removed on exit.
+# /peasant auto. peasant's stdout, its exit status and its stderr are captured
+# in one variable, separated by the unit separator (0x1f): its stdout goes to
+# fd 4 (this capture), its stderr is kept in $errs, and the status and stderr
+# follow the output behind the separator. No temporary file is used, so the
+# command does not depend on a usable TMPDIR.
 if [ "$ARGS" = auto ]; then
   if [ -n "$DIR" ]; then
     cd -- "$DIR" 2>/dev/null || report "ERROR: this session's directory is not reachable: $DIR"
   fi
-  result="$(mktemp "${TMPDIR:-/tmp}/peasant-auto.XXXXXX")" || report "ERROR: cannot create a temporary file for peasant's output"
-  trap 'rm -f "$result"' EXIT
-  { run_peasant village auto; } 3>"$result"
-  line="$(head -1 "$result")"
+  us=$'\037'
+  captured="$( { errs="$(: | peasant village auto 2>&1 >&4 3>&- 4>&-)"; status=$?; printf '\037%s\037%s' "$status" "$errs"; } 4>&1 )"
+  output="${captured%%"$us"*}"
+  rest="${captured#*"$us"}"
+  status="${rest%%"$us"*}"
+  errors="${rest#*"$us"}"
+  line="$(printf '%s\n' "$output" | head -1)"
   if [ "$status" -eq 0 ]; then
     case "$line" in "peasant: "*) report "$line" 1 ;; esac
   fi
