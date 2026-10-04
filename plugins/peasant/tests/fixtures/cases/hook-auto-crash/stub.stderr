@@ -1,0 +1,5 @@
+panic: assignment to entry in nil map
+
+goroutine 1 [running]:
+main.runVillageAuto(0x14000186300, {0x0, 0x0})
+	/src/cmd/peasant/cmd_village_auto.go:120 +0x1c

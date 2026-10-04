@@ -1,0 +1,25 @@
+Commands for pushing transcripts to, and authenticating with, the Peasant village.
+
+Usage:
+  peasant village [flags]
+  peasant village [command]
+
+Available Commands:
+  annotations Sync foreign annotations on your pushed transcripts
+  hooks       Install, inspect, and remove the repository's village upload hooks
+  login       Log in to the Peasant village via GitHub
+  logout      Log out from the Peasant village
+  push        Push ingested transcripts to the Peasant village
+  transcripts Pull, list, and view transcripts from the Peasant village
+
+Flags:
+  -h, --help   help for village
+
+Global Flags:
+      --config string       Path to config file (default: ~/.config/peasant/config.yaml) (default "/home/dev/.config/peasant/config.yaml")
+      --config-dir string   Override the config directory (default: $XDG_CONFIG_HOME or ~/.config); config lives under <config-dir>/peasant
+      --data-dir string     Override the data directory (default: $XDG_DATA_HOME or ~/.local/share); the DB + peasant-sync live under <data-dir>/peasant
+      --state-dir string    Override the state directory (default: $XDG_STATE_HOME or ~/.local/state); logs/PID live under <state-dir>/peasant
+  -v, --version             Print the version
+
+Use "peasant village [command] --help" for more information about a command.

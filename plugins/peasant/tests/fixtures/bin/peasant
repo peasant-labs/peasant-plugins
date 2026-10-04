@@ -5,10 +5,11 @@
 # whatever it reads on stdin, or a note when stdin is not an empty pipe or file
 # as peasant would see it: a character device, or closed (Go reopens a closed
 # stdin as /dev/null). It lists in PEASANT_STUB_FDS each descriptor from 3 to 9
-# it got open. Then it prints stub.stdout on stdout and stub.stderr on stderr,
+# it got open and writes its working directory to PEASANT_STUB_CWD. Then it prints stub.stdout on stdout and stub.stderr on stderr,
 # and exits with the status in stub.exit (0 when the file is absent).
 set -u
 printf '%s\n' "$@" >> "$PEASANT_STUB_ARGV"
+pwd -P > "$PEASANT_STUB_CWD"
 if [ ! -e /dev/stdin ]; then
   echo "(stdin is closed)" >> "$PEASANT_STUB_STDIN"
 elif [ -c /dev/stdin ]; then

@@ -1,6 +1,6 @@
 {
   "name": "peasant",
-  "description": "Harvest the current Claude Code session into peasant and open its transcript in the local web dashboard.",
-  "version": "0.3.0",
+  "description": "Record THIS Claude Code session in peasant and open its transcript in the local web dashboard; with `auto`, publish this repository's sessions on every git push.",
+  "version": "0.4.0",
   "author": { "name": "peasant-labs" }
 }

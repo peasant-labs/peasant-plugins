@@ -1,0 +1,34 @@
+repository: /home/dev/app
+
+pre-push     refused      /home/dev/app/.git/hooks/pre-push
+  What went wrong: a pre-push hook that Peasant did not write is already at /home/dev/app/.git/hooks/pre-push.
+  Why: Peasant only rewrites files it generated, and this one is not framed as one.
+  Where: repository /home/dev/app.
+  When: while planning the pre-push hook, before anything was written.
+  Impact: the existing file is untouched - not edited, wrapped, renamed, chmod'd, or deleted - and no upload hook is active for this event.
+  Fix: add the section below to /home/dev/app/.git/hooks/pre-push by hand, or move that file aside yourself and re-run install.
+
+  add this section to /home/dev/app/.git/hooks/pre-push by hand:
+
+    # BEGIN peasant village upload (pre-push) -- added by hand, not managed by peasant
+    # Add this to /home/dev/app/.git/hooks/pre-push, as the last thing that runs: put it at the end of the
+    # file, or directly above a final 'exit' line if the file has one, because
+    # nothing below an 'exit' ever runs.
+    # Wherever you put it, it does not change what your hook reports to git: it
+    # always succeeds itself, and then restores the status your own commands left.
+    peasant_hook_previous_status=$?
+    # Your pre-push hook receives the refs being pushed on stdin. If your own
+    # commands read them, add this section after that read.
+    (
+    	if command -v peasant >/dev/null 2>&1; then
+    		peasant village push --non-interactive --quiet --timeout 5s --repository '/home/dev/app' </dev/null \
+    			|| printf 'peasant: village upload failed for %s (pre-push); the push itself is unaffected and carries on; retry by hand with: %s\n' '/home/dev/app' 'cd '\''/home/dev/app'\'' && peasant village push --repository '\''/home/dev/app'\''' >&2
+    	else
+    		printf 'peasant: the peasant command is not on PATH, village upload skipped for %s (pre-push)\n' '/home/dev/app' >&2
+    	fi
+    ) || true
+    # Restore the status your commands left, in a subshell: a bare 'exit' here would
+    # make every line below this section unreachable.
+    (exit "$peasant_hook_previous_status")
+    # END peasant village upload (pre-push)
+Error: village auto: the rule is saved, but the pre-push hook was not installed in /home/dev/app, so that event does not publish yet; follow the guidance printed above

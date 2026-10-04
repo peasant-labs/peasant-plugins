@@ -24,8 +24,9 @@ What it does when you type `/peasant`:
    `peasant open --help` describes the output.
 
 The plugin's bundled script (`plugins/peasant/scripts/open-session.sh`) is a
-thin shim over `peasant open`: it finds the session id and passes the
-command's output on. A `UserPromptExpansion` hook (`plugins/peasant/hooks/hooks.json`)
+thin shim over `peasant open` and `peasant village auto`: it selects the
+command from the invocation arguments, runs it in the session's directory, and
+passes the command's output on. A `UserPromptExpansion` hook (`plugins/peasant/hooks/hooks.json`)
 runs it in hook mode, where `peasant open --hook` answers with a `stopReason`
 that stops the command expansion. Claude never processes the prompt, so
 `/peasant` costs no tokens and the agent does not reply. The two lines appear
@@ -33,6 +34,20 @@ as a normal user-facing note.
 
 If hooks are disabled by policy, the skill body runs the same script as a
 fallback, and that path does spend a turn.
+
+### `/peasant auto`
+
+After publishing a session to your chosen collectives, type `/peasant auto`
+in that repository to use those destinations on subsequent git pushes.
+The command delegates to `peasant village auto`; Peasant decides whether
+the repository and prior publication provide the required consent. A refusal
+explains the next step. This requires a release that also provides
+`peasant village auto`.
+
+Deleting or pausing the last matching auto-publish binding stops its hook
+from publishing. Another active binding for the same repository and event
+can still authorize it. Hooks installed separately in a terminal keep their
+own consent.
 
 ## Prerequisite
 
@@ -64,3 +79,9 @@ Then type `/peasant` in any session.
   targets Claude Code sessions.
 - Because the hook stops the command processing, the result renders as a
   user-facing note carrying the two lines, not as an assistant message.
+
+- Hook string values with Unicode or control-character JSON escapes are refused
+  before the command that needs them runs. `/peasant auto` refuses an escaped
+  directory; `/peasant` does not read the directory and still opens the
+  session. Use the named terminal command when a refusal happens; the shim
+  never guesses a repository path from an unsupported escape.

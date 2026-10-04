@@ -1,0 +1,3 @@
+# Verbatim captured output: the stub fixtures reproduce peasant's exact bytes,
+# including a trailing blank line and space-before-tab indents in usage text.
+plugins/peasant/tests/fixtures/cases/**/stub.* -whitespace
