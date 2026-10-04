@@ -1,25 +1,30 @@
 #!/usr/bin/env bash
-# /peasant — record the CURRENT Claude Code session and open its transcript.
+# /peasant — open the CURRENT Claude Code session's transcript.
+#
+# `peasant open` does the work: it records the session, starts the web
+# dashboard when none is running, opens the transcript in the browser, and
+# prints the result. This script finds the session id, runs that command, and
+# passes its output on. It never opens the browser itself.
 #
 # Two modes:
 #
-#   open-session.sh <session-id>   Plain mode. Used by the skill's fallback
-#                                  block when hooks are disabled. Writes
-#                                  progress + the URL to stderr, exits 0.
+#   open-session.sh --hook          Hook mode, from hooks/hooks.json. Reads the
+#                                   UserPromptExpansion JSON on stdin and prints
+#                                   one {"continue":false,"stopReason":"..."}
+#                                   line on stdout, so Claude processes nothing
+#                                   and the lines show as a user-facing note.
 #
-#   open-session.sh --hook         Hook mode. Reads the UserPromptExpansion
-#                                  JSON on stdin and prints a JSON object with
-#                                  `continue: false` and a `stopReason`, so
-#                                  Claude processes nothing (zero tokens) and
-#                                  the message renders as a normal user-facing
-#                                  note instead of a blocked-hook warning.
+#   open-session.sh [<session-id>]  Plain mode, the skill fallback when hooks
+#                                   are disabled. Prints the lines of
+#                                   `peasant open`: two on stdout on success,
+#                                   one on stderr on failure.
 #
-# Either mode: record only this session, ensure the dashboard is up, open the
-# transcript, report the URL.
+# Anything else peasant writes to stderr, such as a one-time config migration
+# notice, is dropped, so the output stays at most two lines.
+#
+# Both modes exit 0 on every outcome. The output reports a failure, so the
+# hook does not render as an error and the skill fallback can relay it.
 set -uo pipefail
-
-PORT=8690
-BASE="http://localhost:${PORT}"
 
 MODE=plain
 if [ "${1:-}" = "--hook" ]; then
@@ -30,71 +35,65 @@ else
   SID="${1:-}"
 fi
 
-# The message is accumulated with literal \n escapes: they are valid JSON
-# string escapes in hook mode and are expanded for the terminal in plain mode.
-MSG=""
-say() {
-  if [ -n "$MSG" ]; then MSG="$MSG\n$*"; else MSG="$*"; fi
-}
-
-# Print the accumulated message in the shape the current mode needs. Always
-# exits 0 — nothing here is an error, and the browser already opened.
-emit() {
+# report LINE: print one line of this script's own in the shape of the mode,
+# then exit 0. In hook mode the line becomes the stopReason: control
+# characters are dropped, and backslashes and double quotes are escaped.
+report() {
   if [ "$MODE" = hook ]; then
-    printf '{"continue":false,"stopReason":"%s"}\n' "$MSG"
+    local reason
+    reason="$(printf '%s' "$1" | LC_ALL=C tr -d '\000-\037' | LC_ALL=C sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')"
+    printf '{"continue":false,"stopReason":"%s"}\n' "$reason"
   else
-    printf '%b\n' "$MSG" >&2
+    printf '%s\n' "$1" >&2
   fi
   exit 0
 }
 
-fail() { say "ERROR: $1"; emit; }
-
-command -v peasant >/dev/null 2>&1 || fail "the 'peasant' binary is not on your PATH"
+command -v peasant >/dev/null 2>&1 || report "ERROR: the 'peasant' binary is not on your PATH"
 
 # Fall back to the newest transcript for this directory when no session id was
-# supplied (older Claude Code, or a skill synced from claude.ai).
+# supplied (older Claude Code, or a skill synced from claude.ai). Claude Code
+# names the directory after the path with every non-alphanumeric character
+# replaced by '-'. This matches it for ASCII paths; Claude Code also shortens
+# names over 200 characters, which this fallback does not.
 if [ -z "$SID" ]; then
-  dir="$HOME/.claude/projects/$(printf '%s' "$PWD" | sed 's#/#-#g')"
+  dir="$HOME/.claude/projects/$(printf '%s' "$PWD" | LC_ALL=C sed 's#[^A-Za-z0-9]#-#g')"
   SID="$(ls -t "$dir"/*.jsonl 2>/dev/null | head -1 | xargs -r -n1 basename 2>/dev/null | sed 's/\.jsonl$//')"
 fi
-[ -n "$SID" ] || fail "no Claude Code transcript found for this directory"
+[ -n "$SID" ] || report "ERROR: no Claude Code transcript found for this directory"
 
-# 1. Record ONLY this session. An empty JSON array means it is not stored yet.
-stored="$(peasant sessions list --session "$SID" --json 2>/dev/null)"
-if printf '%s' "$stored" | grep -q '"id"'; then
-  say "Refreshing this session in peasant…"
-else
-  say "Ingesting this session into peasant…"
-fi
-peasant harvest --session "$SID" --force >/dev/null 2>&1
+# failure_line DEFAULT: the one line to show when `peasant open` did not give
+# its result the normal way. Its own failure line wins wherever it is on stderr
+# (a notice may come first). Otherwise this peasant has no `open` command, or
+# the command stopped without a result line: a flag error (exit 1 with usage
+# on stderr, even with --hook), a crash, or a kill. It reads the captured
+# $errors and the call's $args. DEFAULT is the reason when stderr names none.
+failure_line() {
+  local line
+  line="$(printf '%s\n' "$errors" | grep -m1 '^peasant: ')"
+  if [ -n "$line" ]; then
+    printf '%s' "$line"
+  elif printf '%s\n' "$errors" | grep -q 'unknown command "open"'; then
+    printf '%s' 'peasant: open failed: this peasant has no open command; fix: run `peasant upgrade`, or `peasant upgrade --prerelease` if that finds no newer release (Homebrew installs get stable releases only; a peasant older than v0.5.0 has no upgrade command, so reinstall it from https://github.com/peasant-labs/peasant/releases)'
+  else
+    # The error itself, not a notice printed before it.
+    line="$(printf '%s\n' "$errors" | grep -m1 -E '^(Error|panic): ')"
+    [ -n "$line" ] || line="$(printf '%s\n' "$errors" | sed -n '/[^[:space:]]/{p;q;}')"
+    line="${line#Error: }"
+    printf 'peasant: open failed: %s; fix: run `peasant open %s` in a terminal to see the full error' "${line:-$1}" "${args[*]}"
+  fi
+}
 
-# 2. projectHash, for the transcript deep link.
-hash="$(peasant sessions list --session "$SID" --json 2>/dev/null \
-  | sed -n 's/.*"projectHash": *"\([^"]*\)".*/\1/p' | head -1)"
-
-# 3. Dashboard.
-if ! curl -sf -o /dev/null "${BASE}/api/v1/health" 2>/dev/null; then
-  say "Starting the peasant dashboard on port ${PORT}…"
-  peasant web start --no-browser >/dev/null 2>&1
-  for _ in $(seq 1 40); do
-    curl -sf -o /dev/null "${BASE}/api/v1/health" 2>/dev/null && break
-    sleep 0.25
-  done
-fi
-
-# 4. Open the transcript.
-if [ -n "$hash" ]; then
-  url="${BASE}/projects/${hash}/${SID}"
-else
-  url="${BASE}/"
-fi
-
-case "$(uname -s)" in
-  Darwin) open "$url" >/dev/null 2>&1 || true ;;
-  Linux)  xdg-open "$url" >/dev/null 2>&1 || true ;;
-  *)      ;;  # headless or another OS: the printed URL is the deliverable
-esac
-
-say "URL: ${url}"
-emit
+# Run `peasant open`. Its stdout passes straight through, and in hook mode it
+# is the hook response, which `peasant open --hook` prints on every outcome
+# once its flags parse. Its stderr is kept only to find a failure line in, and
+# is dropped on success. Its stdin is an empty pipe: not this script's stdin,
+# which in plain mode may be a terminal that a prompt would wait on, and not
+# /dev/null, a character device that peasant takes for a terminal. peasant
+# gets no fd 3, so a dashboard it starts cannot hold this script's stdout open.
+args=(--session "$SID")
+[ "$MODE" = plain ] || args+=(--hook)
+{ errors="$(: | peasant open "${args[@]}" 2>&1 >&3 3>&-)"; } 3>&1
+status=$?
+[ "$status" -ne 0 ] || exit 0
+report "$(failure_line "peasant exited with status $status and printed no error")"
